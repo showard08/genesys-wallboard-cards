@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Genesys Wallboard Agent Cards",
+  "version": "0.5.0",
+  "description": "Restyles the Agent Status widget on a Genesys Cloud dashboard into large status cards. Enable it on your Genesys site from the popup.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Agent Cards settings",
+    "default_popup": "popup.html"
+  }
+}
