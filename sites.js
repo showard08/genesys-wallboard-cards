@@ -5,7 +5,7 @@
 
 const SITES_KEY = 'sites';
 const CONTENT_CSS = ['cards.css'];
-const CONTENT_JS = ['defaults.js', 'cards.js'];
+const CONTENT_JS = ['defaults.js', 'cards.js', 'dial-dispatch.js', 'dial-genesys.js'];
 
 /* Match patterns for a host. The dashboard widgets load in an iframe that
    can be served from a sibling subdomain, so alongside the exact host we
