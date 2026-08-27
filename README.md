@@ -13,6 +13,11 @@ stacked status cards:
 - If the list overflows the widget, it auto-scrolls: slowly down to the
   bottom, pause, back up to the top, pause, repeat
 
+It also adds an optional **click-to-dial** feature: when a call is started on
+your dispatch site, the same call is placed on the agent's Genesys Cloud phone
+automatically. It needs the extension enabled on both your dispatch and Genesys
+sites (see Install).
+
 ## How it works
 
 The styling is pure CSS. The widget's table is real light-DOM
@@ -49,19 +54,27 @@ drives `scrollTop` on the scroll container Ember already renders, so
 re-renders and the per-second timers are unaffected. When everything fits on
 screen, nothing moves.
 
-## Install (on the wallboard machine)
+## Install (on the wallboard / dispatch machine)
 
 1. Clone or download this repo onto the machine.
 2. Edge: `edge://extensions` (Chrome: `chrome://extensions`) → enable
    **Developer mode** → **Load unpacked** → select this folder.
-3. Open your Genesys Cloud dashboard tab, click the extension's toolbar icon
-   (pin it from the puzzle-piece menu if it's hidden) and press
-   **Add current tab's site**. Accept the browser's permission prompt.
+3. **Genesys tab** — open your Genesys Cloud tab (the analytics dashboard for
+   the cards, and/or Agent Workspace for click-to-dial), click the extension's
+   toolbar icon (pin it from the puzzle-piece menu if it's hidden) and press
+   **Add current tab's site**. Accept the browser's permission prompt. This
+   enables the cards *and* the Genesys side of click-to-dial.
+4. **Dispatch tab** — for click-to-dial, also open your dispatch site, click the
+   extension icon and press **Add current tab's site**, accepting the prompt.
+   This is what lets the extension read the number when a call starts on
+   dispatch. Skip this step if you only want the cards.
 
-The cards appear immediately. No Genesys domain is baked into the extension —
-it only ever runs on sites you enable this way, and you can remove them from
-the same popup. The list of enabled sites is stored locally in the browser
-profile; the look-and-feel settings sync with the profile.
+The cards appear immediately. No domain is baked into the extension — it only
+ever runs on sites you enable this way, and you can remove them from the same
+popup. Click-to-dial needs **both** sites enabled: the dispatch tab to catch the
+number, and a Genesys tab open to place the call. The list of enabled sites is
+stored locally in the browser profile; the look-and-feel settings sync with the
+profile.
 
 ## Settings
 
