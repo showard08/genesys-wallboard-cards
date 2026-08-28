@@ -1,19 +1,35 @@
-/* Dispatch-side hook for click-to-dial.
+/* Dispatch-side hook for click-to-dial. Hardened build.
    - Reads the number from a driver `.init-call` click OR the "Connecting to …"
      popup (customer / "y" / CALL CUSTOMER).
-   - Validates it against an allow-list (not "any digits").
-   - Asks the agent to confirm before anything is dialled.
-   - Dedupes so the same number can't fire twice. */
+   - Validates against an allow-list AND a premium-rate deny-list.
+   - Requires a genuine human click (event.isTrusted) both to start the flow
+     from a number click and to confirm the dial — page scripts cannot forge
+     isTrusted, so injected code cannot click "Call" for the agent.
+   - Renders its confirm dialog and toast inside a CLOSED shadow root, so page
+     CSS/JS cannot restyle them or alter the number the agent is shown.
+   - Dedupes so the same number can't fire twice.
+   Residual risk (documented): a compromised dispatch page can still DISPLAY a
+   deceptive prompt or fake popup; it cannot complete a call without a real
+   human click on this extension's own dialog, cannot change the number that
+   dialog dials, and cannot pass a number outside the allow-list — which the
+   background worker independently re-checks. */
 (() => {
   if (globalThis.__agentDialDispatchLoaded) return;
   globalThis.__agentDialDispatchLoaded = true;
 
+  // The call popup renders in the top frame; ignoring subframes shrinks the
+  // attack surface. (If your dispatch app runs inside an iframe, remove this.)
+  if (window !== window.top) return;
+
   // ── Number validation ───────────────────────────────────────────────────
-  // Adjust for your dialling plan. Rejects anything that doesn't normalise to
-  // an allowed number, so a stray/injected string can't become a call.
-  const ALLOWED_PREFIXES = ['+44']; // add e.g. '+353' if you dial ROI
-  const MIN_DIGITS = 10;            // total digits after the leading +
-  const MAX_DIGITS = 15;            // E.164 ceiling
+  const ALLOWED_PREFIXES = ['+44'];   // add e.g. '+353' if you dial ROI
+  const BLOCKED_PREFIXES = [          // premium / revenue-share UK ranges
+    '+449',                           // 09xx premium rate
+    '+44844', '+44845',               // 084x service numbers
+    '+44870', '+44871', '+44872', '+44873', // 087x revenue share
+  ];
+  const MIN_DIGITS = 10;              // total digits after the leading +
+  const MAX_DIGITS = 15;              // E.164 ceiling
 
   function normaliseNumber(raw) {
     let n = (raw || '').replace(/[^\d+]/g, '');
@@ -27,7 +43,23 @@
     if (!/^\+\d+$/.test(n)) return false;
     const digits = n.replace(/\D/g, '');
     if (digits.length < MIN_DIGITS || digits.length > MAX_DIGITS) return false;
+    if (BLOCKED_PREFIXES.some((p) => n.startsWith(p))) return false;
     return ALLOWED_PREFIXES.some((p) => n.startsWith(p));
+  }
+
+  // ── Extension-owned UI root (closed shadow DOM) ─────────────────────────
+  // Page styles/scripts can't reach inside a closed shadow root, so what the
+  // agent sees in our dialog is what actually gets dialled.
+  let shadow = null;
+  function uiRoot() {
+    if (shadow && shadow.host.isConnected) return shadow;
+    const host = document.createElement('div');
+    host.style.setProperty('display', 'block', 'important');
+    host.style.setProperty('position', 'fixed', 'important');
+    host.style.setProperty('z-index', '2147483647', 'important');
+    shadow = host.attachShadow({ mode: 'closed' });
+    document.documentElement.appendChild(host);
+    return shadow;
   }
 
   // ── Dedupe + confirm gate ───────────────────────────────────────────────
@@ -36,7 +68,7 @@
 
   async function offerDial(raw) {
     const number = normaliseNumber(raw);
-    if (!validNumber(number)) { toast('Ignored an invalid number', 'err'); return; }
+    if (!validNumber(number)) { toast('Ignored a number not allowed by policy', 'err'); return; }
 
     const now = Date.now();
     if (number === lastDial.number && now - lastDial.at < 3000) return; // just dialled this
@@ -54,6 +86,7 @@
 
   // ── Hook 1: driver number click (no popup) ──────────────────────────────
   document.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;                 // synthetic clicks can't start a dial
     const el = e.target.closest('.init-call');
     if (!el) return;
     const raw = (el.textContent || '').trim();
@@ -94,29 +127,31 @@
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
 
-  // ── Confirm dialog ──────────────────────────────────────────────────────
+  // ── Confirm dialog (inside the closed shadow root) ──────────────────────
   function confirmCall(number) {
     return new Promise((resolve) => {
+      const root = uiRoot();
       const wrap = document.createElement('div');
       wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
       const box = document.createElement('div');
       box.style.cssText = 'background:#fff;color:#111;border-radius:12px;padding:20px 22px;max-width:320px;font:400 14px/1.4 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.3);text-align:center';
+      const title = document.createElement('div');
+      title.style.cssText = 'font-weight:700;margin-bottom:6px';
+      title.textContent = 'Place call?';
       const msg = document.createElement('div');
       msg.style.cssText = 'margin-bottom:16px';
       msg.append('Dial ');
       const strong = document.createElement('span');
       strong.style.fontWeight = '700';
-      strong.textContent = number;                 // textContent, so the number can't inject markup
+      strong.textContent = number;             // textContent — the number can't inject markup
       msg.append(strong, ' on your Genesys phone?');
-      const title = document.createElement('div');
-      title.style.cssText = 'font-weight:700;margin-bottom:6px';
-      title.textContent = 'Place call?';
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;gap:10px;justify-content:center';
 
       let timer;
       const cleanup = () => { clearTimeout(timer); wrap.remove(); document.removeEventListener('keydown', onKey, true); };
       const onKey = (e) => {
+        if (!e.isTrusted) return;              // only real key presses count
         if (e.key === 'Escape') { e.preventDefault(); cleanup(); resolve(false); }
         if (e.key === 'Enter')  { e.preventDefault(); cleanup(); resolve(true); }
       };
@@ -124,37 +159,45 @@
         const b = document.createElement('button');
         b.textContent = label;
         b.style.cssText = `flex:1;padding:9px 12px;border:0;border-radius:8px;font:600 14px system-ui,sans-serif;cursor:pointer;background:${bg};color:${fg}`;
-        b.addEventListener('click', () => { cleanup(); resolve(val); });
+        b.addEventListener('click', (e) => {
+          if (!e.isTrusted) return;            // page scripts can't click for the agent
+          cleanup(); resolve(val);
+        });
         return b;
       };
       row.append(mkBtn('Cancel', '#e5e7eb', '#111', false), mkBtn('Call', '#16a34a', '#fff', true));
       box.append(title, msg, row);
       wrap.append(box);
-      wrap.addEventListener('click', (e) => { if (e.target === wrap) { cleanup(); resolve(false); } });
+      wrap.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
+        if (e.target === wrap) { cleanup(); resolve(false); }
+      });
       document.addEventListener('keydown', onKey, true);
-      document.body.appendChild(wrap);
+      root.appendChild(wrap);
       timer = setTimeout(() => { cleanup(); resolve(false); }, 15000); // auto-cancel
     });
   }
 
-  // ── Outcome toast ───────────────────────────────────────────────────────
+  // ── Outcome toast (inside the closed shadow root) ───────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== 'DIAL_STATUS') return;
-    if (msg.ok)                        toast('Call started', 'ok');
-    else if (msg.reason === 'no-tab')  toast('Genesys isn’t open in this browser', 'err');
-    else if (msg.reason === 'no-line') toast('Pick your outbound queue in Genesys, then click again', 'err');
-    else                               toast('Open Genesys Agent Workspace, then click again', 'err');
+    if (msg.ok)                          toast('Call started', 'ok');
+    else if (msg.reason === 'no-tab')    toast('Genesys isn\u2019t open in this browser', 'err');
+    else if (msg.reason === 'no-line')   toast('Pick your outbound queue in Genesys, then click again', 'err');
+    else if (msg.reason === 'invalid')   toast('Blocked: number not allowed by policy', 'err');
+    else                                 toast('Open Genesys Agent Workspace, then click again', 'err');
   });
 
   let toastEl, toastTimer;
   function toast(text, kind) {
-    if (!toastEl) {
+    const root = uiRoot();
+    if (!toastEl || !toastEl.isConnected) {
       toastEl = document.createElement('div');
       toastEl.style.cssText =
-        'position:fixed;z-index:2147483647;bottom:20px;right:20px;padding:10px 14px;' +
+        'position:fixed;z-index:2147483646;bottom:20px;right:20px;padding:10px 14px;' +
         'border-radius:8px;font:600 13px/1.3 system-ui,sans-serif;color:#fff;' +
         'box-shadow:0 4px 12px rgba(0,0,0,.25);max-width:260px;transition:opacity .2s;pointer-events:none';
-      document.body.appendChild(toastEl);
+      root.appendChild(toastEl);
     }
     toastEl.style.background = { pending: '#2563eb', ok: '#16a34a', err: '#dc2626' }[kind] || '#333';
     toastEl.textContent = text;
