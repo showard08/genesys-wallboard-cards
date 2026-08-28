@@ -1,19 +1,53 @@
-/* Runs on the dispatch site. Two hooks feed the dialer:
-     1. Click on a `.init-call` number (driver Device/Mobile) — no popup appears.
-     2. The "Connecting to …" popup (customer call via number, "y" shortcut, or
-        the CALL CUSTOMER menu item) — where the number is already resolved.
-   A short dedupe means the same number can't dial twice if both ever fire.
-   No-ops on any page without those elements. */
+/* Dispatch-side hook for click-to-dial.
+   - Reads the number from a driver `.init-call` click OR the "Connecting to …"
+     popup (customer / "y" / CALL CUSTOMER).
+   - Validates it against an allow-list (not "any digits").
+   - Asks the agent to confirm before anything is dialled.
+   - Dedupes so the same number can't fire twice. */
 (() => {
   if (globalThis.__agentDialDispatchLoaded) return;
   globalThis.__agentDialDispatchLoaded = true;
 
-  // ── Dedupe: ignore a repeat of the same number within 3s ────────────────
+  // ── Number validation ───────────────────────────────────────────────────
+  // Adjust for your dialling plan. Rejects anything that doesn't normalise to
+  // an allowed number, so a stray/injected string can't become a call.
+  const ALLOWED_PREFIXES = ['+44']; // add e.g. '+353' if you dial ROI
+  const MIN_DIGITS = 10;            // total digits after the leading +
+  const MAX_DIGITS = 15;            // E.164 ceiling
+
+  function normaliseNumber(raw) {
+    let n = (raw || '').replace(/[^\d+]/g, '');
+    if (n.startsWith('00')) n = '+' + n.slice(2);        // 0044… → +44…
+    else if (n.startsWith('0')) n = '+44' + n.slice(1);  // UK national 0… → +44…
+    else if (n && !n.startsWith('+')) n = '+' + n;
+    return n;
+  }
+
+  function validNumber(n) {
+    if (!/^\+\d+$/.test(n)) return false;
+    const digits = n.replace(/\D/g, '');
+    if (digits.length < MIN_DIGITS || digits.length > MAX_DIGITS) return false;
+    return ALLOWED_PREFIXES.some((p) => n.startsWith(p));
+  }
+
+  // ── Dedupe + confirm gate ───────────────────────────────────────────────
   let lastDial = { number: null, at: 0 };
-  function sendDial(number) {
+  let confirming = false;
+
+  async function offerDial(raw) {
+    const number = normaliseNumber(raw);
+    if (!validNumber(number)) { toast('Ignored an invalid number', 'err'); return; }
+
     const now = Date.now();
-    if (number === lastDial.number && now - lastDial.at < 3000) return;
-    lastDial = { number, at: now };
+    if (number === lastDial.number && now - lastDial.at < 3000) return; // just dialled this
+    if (confirming) return;                                             // a dialog is already open
+
+    confirming = true;
+    let ok = false;
+    try { ok = await confirmCall(number); } finally { confirming = false; }
+    if (!ok) return;
+
+    lastDial = { number, at: Date.now() };
     toast(`Dialing ${number}…`, 'pending');
     chrome.runtime.sendMessage({ type: 'DIAL', number });
   }
@@ -23,32 +57,29 @@
     const el = e.target.closest('.init-call');
     if (!el) return;
     const raw = (el.textContent || '').trim();
-    if (!raw) return;                                              // skip empty spans
-    const number = raw.replace(/[^\d+]/g, '').replace(/^00/, '+'); // 0044… → +44…
-    if (number.replace(/\D/g, '').length >= 6) sendDial(number);
+    if (raw) offerDial(raw);
   }, true);
 
-  // ── Hook 2: "Connecting to …" popup (customer / "y" / CALL CUSTOMER) ─────
+  // ── Hook 2: "Connecting to …" popup ─────────────────────────────────────
   const handled = new WeakSet();
 
-  function extractNumber(popup) {
+  function extractRawNumber(popup) {
     const body = popup.querySelector('.popup_inner_inner');
-    if (!body || !/connecting to/i.test(body.textContent)) return null; // ignore driver-info card etc.
+    if (!body || !/connecting to/i.test(body.textContent)) return null; // ignore driver-info card
     for (const span of body.querySelectorAll('span')) {
       const t = (span.textContent || '').trim();
-      if (t.includes('@')) continue;                 // skip the extension/email span
-      const cleaned = t.replace(/[^\d+]/g, '');
-      if (cleaned.replace(/\D/g, '').length >= 6) return cleaned.replace(/^00/, '+');
+      if (!t || t.includes('@')) continue;   // skip the extension/email span
+      if (/\d/.test(t)) return t;            // the number span
     }
     return null;
   }
 
   function handlePopup(popup) {
     if (!popup || handled.has(popup)) return;
-    const number = extractNumber(popup);
-    if (!number) return;
+    const raw = extractRawNumber(popup);
+    if (!raw) return;
     handled.add(popup);
-    sendDial(number);
+    offerDial(raw);
   }
 
   for (const p of document.querySelectorAll('.info_popup')) handlePopup(p);
@@ -62,6 +93,49 @@
       }
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
+
+  // ── Confirm dialog ──────────────────────────────────────────────────────
+  function confirmCall(number) {
+    return new Promise((resolve) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#fff;color:#111;border-radius:12px;padding:20px 22px;max-width:320px;font:400 14px/1.4 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.3);text-align:center';
+      const msg = document.createElement('div');
+      msg.style.cssText = 'margin-bottom:16px';
+      msg.append('Dial ');
+      const strong = document.createElement('span');
+      strong.style.fontWeight = '700';
+      strong.textContent = number;                 // textContent, so the number can't inject markup
+      msg.append(strong, ' on your Genesys phone?');
+      const title = document.createElement('div');
+      title.style.cssText = 'font-weight:700;margin-bottom:6px';
+      title.textContent = 'Place call?';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:10px;justify-content:center';
+
+      let timer;
+      const cleanup = () => { clearTimeout(timer); wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+      const onKey = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(); resolve(false); }
+        if (e.key === 'Enter')  { e.preventDefault(); cleanup(); resolve(true); }
+      };
+      const mkBtn = (label, bg, fg, val) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText = `flex:1;padding:9px 12px;border:0;border-radius:8px;font:600 14px system-ui,sans-serif;cursor:pointer;background:${bg};color:${fg}`;
+        b.addEventListener('click', () => { cleanup(); resolve(val); });
+        return b;
+      };
+      row.append(mkBtn('Cancel', '#e5e7eb', '#111', false), mkBtn('Call', '#16a34a', '#fff', true));
+      box.append(title, msg, row);
+      wrap.append(box);
+      wrap.addEventListener('click', (e) => { if (e.target === wrap) { cleanup(); resolve(false); } });
+      document.addEventListener('keydown', onKey, true);
+      document.body.appendChild(wrap);
+      timer = setTimeout(() => { cleanup(); resolve(false); }, 15000); // auto-cancel
+    });
+  }
 
   // ── Outcome toast ───────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
