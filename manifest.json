@@ -5,8 +5,8 @@
   "description": "Restyles the Genesys agent list into status cards and adds click-to-dial from your dispatch site. Enable sites from the popup.",
   "permissions": ["storage", "scripting", "activeTab"],
   "optional_host_permissions": [
-    "https://YOUR-DISPATCH-HOST/*",
-    "https://YOUR-GENESYS-HOST/*"
+    "https://*.coolnagour.com/*",
+    "https://apps.euw2.pure.cloud/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -14,5 +14,11 @@
   "action": {
     "default_title": "Agent Cards settings",
     "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
   }
 }
