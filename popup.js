@@ -63,8 +63,8 @@ async function renderSites() {
 }
 
 async function enableSite(host, tab = null) {
-  if (!isAllowedHost(host)) {
-    siteMsg(`Only approved dispatch/Genesys hosts can be enabled — "${host}" isn't one.`, true);
+  if (!(await isAllowedHost(host))) {
+    siteMsg(`"${host}" isn't in the extension policy. Ask IT to add it to the allowed hosts.`, true);
     return;
   }
   const granted = await chrome.permissions.request({ origins: sitePatterns(host) });

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "allowedHosts": {
+      "title": "Allowed hosts",
+      "description": "Exact hostnames the extension may be enabled on (e.g. dispatch and Genesys hosts). Delivered by enterprise policy; without it the extension cannot be enabled anywhere.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
