@@ -1,111 +1,205 @@
 # Genesys Wallboard Agent Cards
 
-Browser extension (Edge/Chrome, Manifest V3) that restyles the **Agent Status
-widget** on a Genesys Cloud analytics dashboard
-(`https://apps.<your-region>/directory/#/analytics/dashboards/…`) into large
-stacked status cards:
+Browser extension (Edge/Chrome, Manifest V3) with two features:
+
+1. **Agent cards** — restyles the **Agent Status widget** on a Genesys Cloud
+   analytics dashboard
+   (`https://apps.<your-region>/directory/#/analytics/dashboards/…`) into
+   large stacked status cards.
+2. **Click-to-dial** — when a call is started on your dispatch site, the same
+   call is offered on the agent's Genesys Cloud phone: the agent confirms a
+   prompt and the extension dials it, so the number is never re-typed.
+
+Published on the Microsoft Edge Add-ons store; updates ship automatically via
+the store. MIT licensed.
+
+## Agent cards
 
 - Agent name on top, centred, bold
 - Presence dot + status label underneath, colour-coded
 - Time-in-status below that, largest text on the card; on active calls the
   phone icon + call-duration link sit under the timer
-- Cards stack vertically in the sidebar div where the table already sits
-- If the list overflows the widget, it auto-scrolls: slowly down to the
-  bottom, pause, back up to the top, pause, repeat
+- Cards stack vertically where the table already sits; if the list overflows
+  the widget it auto-scrolls down, pauses, and drifts back up
 
-It also adds an optional **click-to-dial** feature: when a call is started on
-your dispatch site, the same call is placed on the agent's Genesys Cloud phone
-automatically. It needs the extension enabled on both your dispatch and Genesys
-sites (see Install).
-
-## How it works
-
-The styling is pure CSS. The widget's table is real light-DOM
-markup with stable class hooks (`.widget-type-AGENT_STATUS`, `td.column-agent`,
+The styling is pure CSS. The widget's table is real light-DOM markup with
+stable class hooks (`.widget-type-AGENT_STATUS`, `td.column-agent`,
 `td.column-statusAndPresence`, `td.column-unifiedDuration`,
 `.entity-v3-presence-indicator-dot.<presence>`), so `cards.css` restyles the
 rows in place as flex-column cards. Because the DOM is never touched, Ember's
-re-renders and per-second timers keep working, and the styling automatically
-re-applies to every re-rendered row.
+re-renders and per-second timers keep working.
 
 Status colours are keyed off the presence dot's class via `:has()`
-(needs Edge/Chrome 105+, i.e. anything from late 2022 on):
+(needs Edge/Chrome 105+):
 
-| Dot class  | Meaning                    | Colour |
-|------------|----------------------------|--------|
-| available  | Available                  | green  |
-| idle       | On Queue — waiting         | teal   |
-| on_queue   | On Queue — interacting     | blue   |
-| busy       | Busy                       | red    |
-| break      | Break                      | amber  |
-| meal       | Meal                       | orange |
-| away       | Away                       | grey   |
-| offline    | Offline                    | dim grey |
+| Dot class  | Meaning                | Colour   |
+|------------|------------------------|----------|
+| available  | Available              | green    |
+| idle       | On Queue — waiting     | teal     |
+| on_queue   | On Queue — interacting | blue     |
+| busy       | Busy                   | red      |
+| break      | Break                  | amber    |
+| meal       | Meal                   | orange   |
+| away       | Away                   | grey     |
+| offline    | Offline                | dim grey |
 
-(The status label class alone can't be used for this — `OFF_QUEUE` covers both
-Available and Away; the dot class always distinguishes them.)
+When the card list is taller than the widget, `cards.js` drives the widget's
+own scroll container (35 px/s down, pause, back up); it never modifies the
+widget's DOM.
 
-## Auto-scroll
+## Click-to-dial
 
-When the card list is taller than the widget, `cards.js` drifts the widget's
-own scroll container down to the bottom at 35 px/s, holds for 2.5 s, drifts
-back up, holds, and repeats. It never modifies the widget's DOM — it only
-drives `scrollTop` on the scroll container Ember already renders, so
-re-renders and the per-second timers are unaffected. When everything fits on
-screen, nothing moves.
+An agent starts a call the way they already do on the dispatch page —
+clicking a number, the **Y** shortcut, or **CALL CUSTOMER**. The extension
+reads the number (from the clicked element, or from the "Connecting to …"
+popup where the dispatch app has already resolved it), shows a confirmation
+dialog, and on confirm drives the Genesys Agent Workspace dialer in the other
+tab via the extension's background relay.
 
-## Install (on the wallboard / dispatch machine)
+### Security model
 
-1. Clone or download this repo onto the machine.
-2. Edge: `edge://extensions` (Chrome: `chrome://extensions`) → enable
-   **Developer mode** → **Load unpacked** → select this folder.
-3. **Genesys tab** — open your Genesys Cloud tab (the analytics dashboard for
-   the cards, and/or Agent Workspace for click-to-dial), click the extension's
-   toolbar icon (pin it from the puzzle-piece menu if it's hidden) and press
-   **Add current tab's site**. Accept the browser's permission prompt. This
-   enables the cards *and* the Genesys side of click-to-dial.
-4. **Dispatch tab** — for click-to-dial, also open your dispatch site, click the
-   extension icon and press **Add current tab's site**, accepting the prompt.
-   This is what lets the extension read the number when a call starts on
-   dispatch. Skip this step if you only want the cards.
+- **Confirm-gated**: nothing dials without a human clicking **Call** in the
+  extension's own dialog (auto-cancels after 15 s). A dedupe guard stops the
+  same number firing twice.
+- **Number policy**: numbers must normalise to an allowed prefix (`+44` by
+  default), 10–15 digits; premium/revenue-share ranges (09xx, 084x, 087x) are
+  blocked. Enforced twice — on the dispatch page and independently in the
+  background worker.
+- **Real input only**: the flow only starts and confirms on genuine user
+  events (`event.isTrusted`) — page scripts cannot synthesise a click to
+  start or approve a call.
+- **Tamper-resistant UI**: the dialog and toasts render inside a closed
+  shadow root, so page CSS/JS cannot alter the number the agent is shown.
+  What's displayed is what dials.
+- **Residual risk (stated plainly)**: a compromised dispatch page can still
+  display deceptive content; it cannot complete a call without a real human
+  click on the extension's dialog, and cannot pass a number outside policy.
 
-The cards appear immediately. No domain is baked into the extension — it only
-ever runs on sites you enable this way, and you can remove them from the same
-popup. Click-to-dial needs **both** sites enabled: the dispatch tab to catch the
-number, and a Genesys tab open to place the call. The list of enabled sites is
-stored locally in the browser profile; the look-and-feel settings sync with the
-profile.
+### Host configuration (enterprise policy)
+
+The package contains **no hostnames** and is **inert by default**. The exact
+hosts the extension may be enabled on are delivered by enterprise policy via
+managed storage: IT deploys a registry value (`allowedHosts`, a JSON array of
+exact hostnames) under
+`HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<extension-id>\policy`
+by GPO or Intune. The extension reads it through `chrome.storage.managed`
+(schema declared in `schema.json`) and refuses to enable anywhere not listed.
+
+- No policy → empty list → the extension cannot be enabled on any site, so a
+  copy installed outside the organisation does nothing.
+- Only administrators can write HKLM, so users cannot extend the scope.
+- Policy changes apply live — hosts removed from the policy are unregistered
+  automatically, no browser restart needed.
+- The manifest's host permissions are broad by necessity (a manifest cannot
+  be edited by policy); the **effective** scope is exactly the policy list.
+
+Full IT instructions, including the force-install policy and verification
+steps, are in `IT-DEPLOYMENT.md`.
+
+### DOM hooks it depends on
+
+If a Genesys or dispatch update breaks dialling, re-inspect these first:
+
+| Side     | Element             | Selector                                      |
+|----------|---------------------|-----------------------------------------------|
+| Dispatch | Call popup          | `.info_popup` containing text "Connecting to" |
+| Dispatch | Popup body / number | `.popup_inner_inner > span`                   |
+| Dispatch | Number click        | `.init-call`                                  |
+| Genesys  | Open-dialer button  | `#interaction-new-call-outbound-target`       |
+| Genesys  | Number field        | `input.phone-number-input`                    |
+| Genesys  | Call button         | `button.make-call`                            |
+
+### Required Genesys setting (per agent)
+
+Genesys won't enable its call button until the outbound line / On Behalf of
+Queue is set. Enable each agent's user setting to auto-fill the default
+outbound line/queue (or have them select their queue once so it's
+remembered). Without it, dials fail with a "pick your outbound queue" toast.
+
+## Install
+
+**From the store (normal use):** install from the Microsoft Edge Add-ons
+listing. IT can force-install and lock it via the `ExtensionInstallForcelist`
+policy using the store ID.
+
+**From source (development):** clone the repo, then `edge://extensions` →
+Developer mode → Load unpacked, and create the `allowedHosts` registry value
+by hand using the unpacked copy's extension ID (see `IT-DEPLOYMENT.md` —
+GPO ultimately just writes this value).
+
+**Prerequisite either way:** the `allowedHosts` policy must be present on the
+machine, or the extension cannot be enabled anywhere.
+
+Then enable it per site — it runs nowhere until you do:
+
+1. **Genesys tab** — open your Genesys Cloud tab (dashboard for the cards,
+   Agent Workspace for dialling), click the extension's toolbar icon and
+   press **Add current tab's site**; accept the permission prompt.
+2. **Dispatch tab** — repeat on your dispatch site (needed for click-to-dial;
+   skip if you only want the cards).
+
+Click-to-dial needs **both** sites enabled and both tabs open. Enabled
+hostnames are stored locally in the browser profile; look-and-feel settings
+sync with the profile.
 
 ## Settings
 
-Click the extension's toolbar icon to open the settings popup. Everything
-saves as you change it and applies live to the open wallboard tab — no
-reload needed. Settings sync with the browser profile (`chrome.storage.sync`).
+Click the toolbar icon. Everything saves as you change it and applies live —
+no reload. Settings sync via `chrome.storage.sync`.
 
 | Setting | What it does |
 |---|---|
-| Card style | **Large boxes** — grid of boxes, name / status / timer stacked and centred. **Compact rows** — thin rows, name over status on the left, timer right. |
+| Card style | **Large boxes** — grid, name/status/timer stacked. **Compact rows** — thin rows, timer right. |
 | Cards per row | Grid columns in large style (1–4). |
 | Text size | Scales the whole card (80–160%). |
-| Auto-scroll + speed + pause | Drift down/up when the list overflows; px per second and hold time at each end. |
-| Blue glow / pulse | The glow on Interacting cards, and whether it breathes. |
-| Show call timer instead of status timer | On Interacting cards, hide the time-in-status and promote the call timer to its place. |
+| Auto-scroll + speed + pause | Drift down/up when the list overflows. |
+| Blue glow / pulse | The glow on Interacting cards. |
+| Show call timer instead of status timer | Promote the call timer on Interacting cards. |
 
-**Reset** puts everything back to the defaults in `defaults.js`.
+**Reset** restores the defaults in `defaults.js`.
 
-## Tuning (in the CSS)
+## Troubleshooting click-to-dial
 
-Things without a popup setting:
+| Toast / message | Meaning · fix |
+|---|---|
+| **Call started** | Working — Genesys is ringing. |
+| **Pick your outbound queue in Genesys…** | Agent's outbound line isn't auto-filling — enable the Genesys user setting. |
+| **Open Genesys Agent Workspace, then click again** | No Genesys tab answered in time — open Workspace, or raise `DIAL_TIMEOUT_MS` in `background.js`. |
+| **Genesys isn't open in this browser** | No enabled Genesys tab open. |
+| **Ignored a number not allowed by policy / Blocked: number not allowed by policy** | The number failed the prefix/length/premium checks — adjust the policy constants if it's legitimate. |
+| **"…isn't in the extension policy" when adding a site** | Host isn't in the `allowedHosts` policy value — IT adds it there (no code change). Check `edge://policy` shows the value. |
+| **No toast at all** | Extension isn't enabled on the dispatch host, or the popup markup changed — re-inspect the DOM hooks. |
 
-- **Sizes**: font sizes are on the `column-agent` / `additional-label` /
-  `time-in-status` rules in `cards.css` (per style, in the
-  `html.agent-cards-large` / `html.agent-cards-compact` blocks).
-- **Colours**: the `:has()` block in the middle of `cards.css`; the glow's
-  colour/strength/reach is on the `::after` rule next to it.
-- **Card look**: background/border-radius/padding on the `tbody tr` rule.
-- **Card order**: cards follow the table's sort order — change the sort in the
-  widget's settings (currently Duration ascending).
+## Releases
 
-After editing, hit **Reload** on the extension in `edge://extensions`, then
-refresh the wallboard tab. The CSS applies to every `widget-type-AGENT_STATUS`
-widget on the dashboard; other widget types are untouched.
+Versions are tagged in this repo and published to the Edge Add-ons store
+automatically by the GitHub Action in `.github/workflows/publish.yml`:
+
+1. Bump `version` in `manifest.json` (must match the tag).
+2. `git commit -am "x.y.z" && git tag x.y.z && git push && git push --tags`
+3. The workflow zips the extension, uploads it via the Edge Publish API, and
+   submits it for certification; it goes live to installed users
+   automatically once approved.
+
+Requires repo secrets `EDGE_PRODUCT_ID`, `EDGE_CLIENT_ID`, `EDGE_API_KEY`
+(from Partner Center — note the API key's expiry date).
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `manifest.json` | MV3 manifest; host permissions broad but policy-gated (see Host configuration). |
+| `background.js` | Re-registers enabled sites on install/startup; relays and re-validates dial requests between tabs. |
+| `sites.js` | Per-site registration; allow-list read from enterprise policy. |
+| `schema.json` | Managed-storage policy schema (`allowedHosts`). |
+| `IT-DEPLOYMENT.md` | IT guide: registry value, force-install policy, verification. |
+| `popup.html` / `popup.js` | Settings popup and site enable/remove. |
+| `defaults.js` | Default card settings. |
+| `cards.css` / `cards.js` | Card styling + auto-scroll. |
+| `dial-dispatch.js` | Dispatch-side: number capture, validation, confirm dialog. |
+| `dial-genesys.js` | Genesys-side: drives the Agent Workspace dialer. |
+| `icon-*.png` | Toolbar/store icons. |
+
+## Licence
+
+MIT — see `LICENSE`.
