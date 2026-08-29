@@ -5,8 +5,8 @@
   "description": "Restyles the Genesys agent list into status cards and adds click-to-dial from your dispatch site. Enable sites from the popup.",
   "permissions": ["storage", "scripting", "activeTab"],
   "optional_host_permissions": [
-    "https://*.coolnagour.com/*",
-    "https://apps.euw2.pure.cloud/*"
+    'YOUR-DISPATCH-HOST',   // e.g. dispatch.icabbi.com
+    'YOUR-GENESYS-HOST',    // e.g. apps.mypurecloud.com
   ],
   "background": {
     "service_worker": "background.js"
