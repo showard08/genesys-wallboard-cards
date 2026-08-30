@@ -45,7 +45,7 @@ jobs:
         id: upload
         run: |
           HEADERS=$(mktemp)
-          curl -sf -D "$HEADERS" \
+          curl -s -w '\nHTTP %{http_code}\n' -D "$HEADERS" \
             -H "Authorization: ApiKey ${{ secrets.EDGE_API_KEY }}" \
             -H "X-ClientID: ${{ secrets.EDGE_CLIENT_ID }}" \
             -H "Content-Type: application/zip" \
