@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Genesys Wallboard Agent Cards",
-  "version": "0.7.0",
+  "version": "0.7.4",
   "description": "Restyles the Genesys agent list into status cards and adds click-to-dial from your dispatch site. Enable sites from the popup.",
   "permissions": ["storage", "scripting", "activeTab"],
   "optional_host_permissions": ["https://*/*"],
