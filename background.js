@@ -11,6 +11,11 @@ chrome.runtime.onStartup.addListener(() => {
   syncRegistrations();
 });
 
+// Re-sync registrations when IT updates the policy allow-list
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'managed' && changes.allowedHosts) syncRegistrations();
+});
+
 const DIAL_TIMEOUT_MS = 12000;
 const pendingDials = new Map();          // reqId -> { dispatchTabId, timer }
 

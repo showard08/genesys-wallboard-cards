@@ -75,14 +75,26 @@ tab via the extension's background relay.
   display deceptive content; it cannot complete a call without a real human
   click on the extension's dialog, and cannot pass a number outside policy.
 
-### Host configuration
+### Host configuration (enterprise policy)
 
-The extension may only be enabled on the exact hosts listed in
-`ALLOWED_HOSTS` in `sites.js`, which must match the entries in
-`manifest.json → optional_host_permissions` (exact hostnames, no wildcards).
-Fill both with your dispatch host and Genesys host before packing. Enabling
-any other site is refused, and host permission is only ever requested for the
-exact host at the user's click.
+The package contains **no hostnames** and is **inert by default**. The exact
+hosts the extension may be enabled on are delivered by enterprise policy via
+managed storage: IT deploys a registry value (`allowedHosts`, a JSON array of
+exact hostnames) under
+`HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<extension-id>\policy`
+by GPO or Intune. The extension reads it through `chrome.storage.managed`
+(schema declared in `schema.json`) and refuses to enable anywhere not listed.
+
+- No policy → empty list → the extension cannot be enabled on any site, so a
+  copy installed outside the organisation does nothing.
+- Only administrators can write HKLM, so users cannot extend the scope.
+- Policy changes apply live — hosts removed from the policy are unregistered
+  automatically, no browser restart needed.
+- The manifest's host permissions are broad by necessity (a manifest cannot
+  be edited by policy); the **effective** scope is exactly the policy list.
+
+Full IT instructions, including the force-install policy and verification
+steps, are in `IT-DEPLOYMENT.md`.
 
 ### DOM hooks it depends on
 
@@ -110,8 +122,13 @@ remembered). Without it, dials fail with a "pick your outbound queue" toast.
 listing. IT can force-install and lock it via the `ExtensionInstallForcelist`
 policy using the store ID.
 
-**From source (development):** clone the repo, fill in the hosts (see Host
-configuration), then `edge://extensions` → Developer mode → Load unpacked.
+**From source (development):** clone the repo, then `edge://extensions` →
+Developer mode → Load unpacked, and create the `allowedHosts` registry value
+by hand using the unpacked copy's extension ID (see `IT-DEPLOYMENT.md` —
+GPO ultimately just writes this value).
+
+**Prerequisite either way:** the `allowedHosts` policy must be present on the
+machine, or the extension cannot be enabled anywhere.
 
 Then enable it per site — it runs nowhere until you do:
 
@@ -150,7 +167,7 @@ no reload. Settings sync via `chrome.storage.sync`.
 | **Open Genesys Agent Workspace, then click again** | No Genesys tab answered in time — open Workspace, or raise `DIAL_TIMEOUT_MS` in `background.js`. |
 | **Genesys isn't open in this browser** | No enabled Genesys tab open. |
 | **Ignored a number not allowed by policy / Blocked: number not allowed by policy** | The number failed the prefix/length/premium checks — adjust the policy constants if it's legitimate. |
-| **"…isn't one" when adding a site** | Host isn't in `ALLOWED_HOSTS` — add it there and to the manifest. |
+| **"…isn't in the extension policy" when adding a site** | Host isn't in the `allowedHosts` policy value — IT adds it there (no code change). Check `edge://policy` shows the value. |
 | **No toast at all** | Extension isn't enabled on the dispatch host, or the popup markup changed — re-inspect the DOM hooks. |
 
 ## Releases
@@ -171,9 +188,11 @@ Requires repo secrets `EDGE_PRODUCT_ID`, `EDGE_CLIENT_ID`, `EDGE_API_KEY`
 
 | File | Purpose |
 |---|---|
-| `manifest.json` | MV3 manifest; host permissions pinned to the two configured hosts. |
+| `manifest.json` | MV3 manifest; host permissions broad but policy-gated (see Host configuration). |
 | `background.js` | Re-registers enabled sites on install/startup; relays and re-validates dial requests between tabs. |
-| `sites.js` | Per-site registration + `ALLOWED_HOSTS`. |
+| `sites.js` | Per-site registration; allow-list read from enterprise policy. |
+| `schema.json` | Managed-storage policy schema (`allowedHosts`). |
+| `IT-DEPLOYMENT.md` | IT guide: registry value, force-install policy, verification. |
 | `popup.html` / `popup.js` | Settings popup and site enable/remove. |
 | `defaults.js` | Default card settings. |
 | `cards.css` / `cards.js` | Card styling + auto-scroll. |
