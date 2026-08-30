@@ -59,15 +59,16 @@ jobs:
       - name: Wait for package processing
         run: |
           for i in $(seq 1 30); do
-            STATUS=$(curl -sf \
+            BODY=$(curl -sf \
               -H "Authorization: ApiKey ${{ secrets.EDGE_API_KEY }}" \
               -H "X-ClientID: ${{ secrets.EDGE_CLIENT_ID }}" \
-              "https://api.addons.microsoftedge.microsoft.com/v1/products/${{ secrets.EDGE_PRODUCT_ID }}/submissions/draft/package/operations/${{ steps.upload.outputs.operation }}" \
-              | jq -r '.status // empty')
+              "https://api.addons.microsoftedge.microsoft.com/v1/products/${{ secrets.EDGE_PRODUCT_ID }}/submissions/draft/package/operations/${{ steps.upload.outputs.operation }}")
+            STATUS=$(echo "$BODY" | jq -r '.status // empty')
             echo "Upload status: ${STATUS:-unknown}"
             if [ "$STATUS" = "Succeeded" ]; then exit 0; fi
             if [ "$STATUS" = "Failed" ]; then
-              echo "::error::Package processing failed — check the version was incremented and the zip layout"
+              echo "Full response from Edge API:"
+              echo "$BODY" | jq .
               exit 1
             fi
             sleep 10
