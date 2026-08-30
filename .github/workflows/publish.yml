@@ -38,7 +38,7 @@ jobs:
           zip extension.zip \
             manifest.json background.js sites.js defaults.js \
             cards.js cards.css popup.html popup.js \
-            dial-dispatch.js dial-genesys.js \
+            dial-dispatch.js dial-genesys.js schema.json \
             icon-16.png icon-32.png icon-48.png icon-128.png
  
       - name: Upload package to draft submission
