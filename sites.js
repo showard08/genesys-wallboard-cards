@@ -11,7 +11,7 @@
 
 const SITES_KEY = 'sites';
 const CONTENT_CSS = ['cards.css'];
-const CONTENT_JS = ['defaults.js', 'cards.js', 'dial-dispatch.js', 'dial-genesys.js'];
+const CONTENT_JS = ['defaults.js', 'security.js', 'cards.js', 'dial-dispatch.js', 'dial-genesys.js'];
 
 /* Allowed hosts come from enterprise policy. IT sets the extension policy
    value "allowedHosts" (a JSON array of exact hostnames) via GPO/Intune. */

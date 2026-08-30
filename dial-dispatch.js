@@ -22,30 +22,10 @@
   if (window !== window.top) return;
 
   // ── Number validation ───────────────────────────────────────────────────
-  const ALLOWED_PREFIXES = ['+44'];   // add e.g. '+353' if you dial ROI
-  const BLOCKED_PREFIXES = [          // premium / revenue-share UK ranges
-    '+449',                           // 09xx premium rate
-    '+44844', '+44845',               // 084x service numbers
-    '+44870', '+44871', '+44872', '+44873', // 087x revenue share
-  ];
-  const MIN_DIGITS = 10;              // total digits after the leading +
-  const MAX_DIGITS = 15;              // E.164 ceiling
-
-  function normaliseNumber(raw) {
-    let n = (raw || '').replace(/[^\d+]/g, '');
-    if (n.startsWith('00')) n = '+' + n.slice(2);        // 0044… → +44…
-    else if (n.startsWith('0')) n = '+44' + n.slice(1);  // UK national 0… → +44…
-    else if (n && !n.startsWith('+')) n = '+' + n;
-    return n;
-  }
-
-  function validNumber(n) {
-    if (!/^\+\d+$/.test(n)) return false;
-    const digits = n.replace(/\D/g, '');
-    if (digits.length < MIN_DIGITS || digits.length > MAX_DIGITS) return false;
-    if (BLOCKED_PREFIXES.some((p) => n.startsWith(p))) return false;
-    return ALLOWED_PREFIXES.some((p) => n.startsWith(p));
-  }
+  // Shared rules from security.js (loaded before this file — see CONTENT_JS
+  // in sites.js). The service worker independently re-checks with the SAME
+  // functions, so this page-side check is UX, not the security boundary.
+  const { normaliseNumber, validNumber } = globalThis.AGENT_CARDS_SECURITY;
 
   // ── Extension-owned UI root (closed shadow DOM) ─────────────────────────
   // Page styles/scripts can't reach inside a closed shadow root, so what the

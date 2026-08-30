@@ -1,0 +1,96 @@
+# Publishes a tagged release to the Microsoft Edge Add-ons store via the
+# Publish API (v1.1). Triggered by pushing a version tag (0.6.1 or v0.6.1).
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   EDGE_PRODUCT_ID  – GUID from the extension overview page in Partner Center
+#   EDGE_CLIENT_ID   – from the Publish API page in Partner Center
+#   EDGE_API_KEY     – from the Publish API page in Partner Center
+#
+# The publish call submits the update for Microsoft certification; it goes
+# live to users automatically once certified.
+ 
+name: Publish to Edge Add-ons
+ 
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+ 
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run unit tests
+        run: node --test
+
+ 
+      - name: Check tag matches manifest version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(jq -r .version manifest.json)
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match manifest.json version $VERSION"
+            exit 1
+          fi
+          echo "Releasing version $VERSION"
+ 
+      - name: Build package zip
+        run: |
+          zip extension.zip \
+            manifest.json background.js sites.js defaults.js security.js \
+            cards.js cards.css popup.html popup.js \
+            dial-dispatch.js dial-genesys.js schema.json \
+            icon-16.png icon-32.png icon-48.png icon-128.png
+ 
+      - name: Upload package to draft submission
+        id: upload
+        run: |
+          HEADERS=$(mktemp)
+          curl -s -w '\nHTTP %{http_code}\n' -D "$HEADERS" \
+            -H "Authorization: ApiKey ${{ secrets.EDGE_API_KEY }}" \
+            -H "X-ClientID: ${{ secrets.EDGE_CLIENT_ID }}" \
+            -H "Content-Type: application/zip" \
+            -X POST -T extension.zip \
+            "https://api.addons.microsoftedge.microsoft.com/v1/products/${{ secrets.EDGE_PRODUCT_ID }}/submissions/draft/package"
+          OP=$(grep -i '^location:' "$HEADERS" | tr -d '\r' | awk '{print $2}')
+          OP="${OP##*/}"   # tolerate a full URL or a bare operation ID
+          if [ -z "$OP" ]; then echo "::error::No operation ID returned"; exit 1; fi
+          echo "operation=$OP" >> "$GITHUB_OUTPUT"
+ 
+      - name: Wait for package processing
+        run: |
+          for i in $(seq 1 30); do
+            BODY=$(curl -sf \
+              -H "Authorization: ApiKey ${{ secrets.EDGE_API_KEY }}" \
+              -H "X-ClientID: ${{ secrets.EDGE_CLIENT_ID }}" \
+              "https://api.addons.microsoftedge.microsoft.com/v1/products/${{ secrets.EDGE_PRODUCT_ID }}/submissions/draft/package/operations/${{ steps.upload.outputs.operation }}")
+            STATUS=$(echo "$BODY" | jq -r '.status // empty')
+            echo "Upload status: ${STATUS:-unknown}"
+            if [ "$STATUS" = "Succeeded" ]; then exit 0; fi
+            if [ "$STATUS" = "Failed" ]; then
+              echo "Full response from Edge API:"
+              echo "$BODY" | jq .
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "::error::Timed out waiting for package processing"
+          exit 1
+ 
+      - name: Publish the draft submission
+        run: |
+          BODY=$(curl -s -w '\nHTTP %{http_code}' \
+            -H "Authorization: ApiKey ${{ secrets.EDGE_API_KEY }}" \
+            -H "X-ClientID: ${{ secrets.EDGE_CLIENT_ID }}" \
+            -X POST -d '' \
+            "https://api.addons.microsoftedge.microsoft.com/v1/products/${{ secrets.EDGE_PRODUCT_ID }}/submissions")
+          echo "$BODY"
+          CODE=$(echo "$BODY" | tail -1 | awk '{print $2}')
+          if [ "$CODE" -ge 400 ] 2>/dev/null; then
+            echo "::error::Publish call failed — see response above"
+            exit 1
+          fi
+          echo "Submitted for certification — it goes live automatically once approved."
