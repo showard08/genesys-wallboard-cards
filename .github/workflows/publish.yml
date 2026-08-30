@@ -81,7 +81,7 @@ jobs:
           BODY=$(curl -s -w '\nHTTP %{http_code}' \
             -H "Authorization: ApiKey ${{ secrets.EDGE_API_KEY }}" \
             -H "X-ClientID: ${{ secrets.EDGE_CLIENT_ID }}" \
-            -X POST -d\
+            -X POST -d '' \
             "https://api.addons.microsoftedge.microsoft.com/v1/products/${{ secrets.EDGE_PRODUCT_ID }}/submissions")
           echo "$BODY"
           CODE=$(echo "$BODY" | tail -1 | awk '{print $2}')
