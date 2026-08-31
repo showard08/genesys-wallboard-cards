@@ -128,6 +128,8 @@ function render(s) {
   $('callGlow').checked = s.callGlow;
   $('glowPulse').checked = s.glowPulse;
   $('callTimerReplaces').checked = s.callTimerReplaces;
+  $('wallboard').checked = s.wallboard;
+  $('wallboardHeight').value = String(s.wallboardHeight);
   refresh();
 }
 
@@ -146,6 +148,8 @@ function read() {
     callGlow: $('callGlow').checked,
     glowPulse: $('glowPulse').checked,
     callTimerReplaces: $('callTimerReplaces').checked,
+    wallboard: $('wallboard').checked,
+    wallboardHeight: parseInt($('wallboardHeight').value, 10),
   };
 }
 

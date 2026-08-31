@@ -21,6 +21,8 @@
     root.classList.toggle('agent-cards-no-glow', !settings.callGlow);
     root.classList.toggle('agent-cards-no-pulse', !settings.glowPulse);
     root.classList.toggle('agent-cards-keep-timer', !settings.callTimerReplaces);
+    root.classList.toggle('agent-cards-wallboard', !!settings.wallboard);
+    root.style.setProperty('--agent-cards-wallboard-h', settings.wallboardHeight + 'vh');
     root.style.setProperty('--agent-cards-cols', String(settings.columns));
     root.style.setProperty('--agent-cards-scale', String(settings.fontScale));
   }

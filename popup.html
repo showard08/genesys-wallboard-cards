@@ -104,12 +104,32 @@
         <option value="2">2</option>
         <option value="3">3</option>
         <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="8">8</option>
       </select>
     </div>
     <div class="row">
       <label for="fontScale">Text size</label>
       <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05">
       <span class="value" id="fontScaleValue"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Wallboard mode</h2>
+    <div class="row">
+      <label for="wallboard">Full-width agent wallboard on top</label>
+      <input type="checkbox" id="wallboard">
+    </div>
+    <div class="row sub" data-depends="wallboard">
+      <label for="wallboardHeight">Wallboard height</label>
+      <select id="wallboardHeight">
+        <option value="40">40% of screen</option>
+        <option value="50">50% of screen</option>
+        <option value="60">60% of screen</option>
+        <option value="75">75% of screen</option>
+      </select>
     </div>
   </section>
 

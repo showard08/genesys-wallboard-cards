@@ -13,4 +13,6 @@ globalThis.AGENT_CARDS_DEFAULTS = globalThis.AGENT_CARDS_DEFAULTS || {
   callGlow: true,        // blue glow on Interacting cards
   glowPulse: true,       // ...and make it breathe
   callTimerReplaces: true, // Interacting: show call timer instead of main timer
+  wallboard: false,        // promote the Agent Status widget to a full-width band on top
+  wallboardHeight: 50,     // wallboard mode: agent band height, in vh (% of screen)
 };

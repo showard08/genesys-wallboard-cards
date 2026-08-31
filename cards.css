@@ -453,3 +453,46 @@ html.agent-cards-compact:not(.agent-cards-keep-timer) .widget-type-AGENT_STATUS 
   .conversation-duration-cell-v2 .time-duration {
   font-size: 1.45em !important;
 }
+
+
+/* ── Wallboard mode ───────────────────────────────────────────────────────
+   Promotes the Agent Status widget from Genesys' fixed 300px right sidebar
+   to a full-width band across the top of the dashboard, with every other
+   widget reflowing underneath. Layout-only: the dashboard grid's two
+   children (.flow-layout-main, .flow-layout-sidebar) are re-slotted with
+   grid placement — no element is moved, so Ember re-renders are unaffected.
+   Toggled by cards.js as html.agent-cards-wallboard; the band height comes
+   from --agent-cards-wallboard-h ("Wallboard height" in the popup). */
+
+html.agent-cards-wallboard .flow-layout-parent {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: var(--agent-cards-wallboard-h, 50vh) minmax(0, 1fr) !important;
+}
+
+/* Agents on top… */
+html.agent-cards-wallboard .flow-layout-sidebar {
+  grid-row: 1 !important;
+  grid-column: 1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;   /* fill the band row */
+  min-height: 0 !important;  /* allow the row, not the content, to set height */
+}
+
+/* …everything else underneath */
+html.agent-cards-wallboard .flow-layout-main {
+  grid-row: 2 !important;
+  grid-column: 1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 0 !important;
+}
+
+/* The widget fills the band; its own scroll container keeps the overflow,
+   so auto-scroll keeps working (and idles when everything fits). */
+html.agent-cards-wallboard .flow-layout-sidebar .analytics-ui-dashboard-card-widget {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
