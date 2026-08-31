@@ -496,3 +496,43 @@ html.agent-cards-wallboard .flow-layout-sidebar .analytics-ui-dashboard-card-wid
   height: 100% !important;
   min-height: 0 !important;
 }
+
+/* Wallboard + compact rows: flow the thin rows into columns instead of one
+   row stretched across the full width. Reuses the same "Cards per row"
+   setting as large style (--agent-cards-cols). */
+html.agent-cards-wallboard.agent-cards-compact .widget-type-AGENT_STATUS gux-table tbody {
+  display: grid !important;
+  grid-template-columns: repeat(var(--agent-cards-cols, 2), minmax(0, 1fr));
+  align-content: start;
+}
+
+/* ── Not Responding: whole card pulses red ───────────────────────────────
+   An agent who missed an alerting interaction needs to be unmissable on the
+   board. Keyed off BOTH plausible Genesys hooks — a not_responding presence
+   dot class, or a NOT_RESPONDING routing-status class on the label — so
+   whichever one Genesys emits, the card lights up. Painted on the card's own
+   background + border so it works in every style and in wallboard mode.
+   (Animation is on the tr; the Interacting glow lives on ::after, so the two
+   can coexist without fighting.) */
+.widget-type-AGENT_STATUS gux-table tbody tr:has(.entity-v3-presence-indicator-dot.not_responding),
+.widget-type-AGENT_STATUS gux-table tbody tr:has([class*="NOT_RESPONDING"]),
+.widget-type-AGENT_STATUS gux-table tbody tr:has([class*="not-responding"]) {
+  border-left-color: #dc2626 !important;
+  animation: agent-cards-not-responding 1.1s ease-in-out infinite;
+}
+.widget-type-AGENT_STATUS gux-table tbody tr:has(.entity-v3-presence-indicator-dot.not_responding) .additional-label,
+.widget-type-AGENT_STATUS gux-table tbody tr:has([class*="NOT_RESPONDING"]) .additional-label,
+.widget-type-AGENT_STATUS gux-table tbody tr:has([class*="not-responding"]) .additional-label {
+  color: #dc2626 !important;
+  font-weight: 700;
+}
+@keyframes agent-cards-not-responding {
+  0%, 100% {
+    background-color: #ffffff;
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+  50% {
+    background-color: #fee2e2;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.55), 0 0 18px rgba(220, 38, 38, 0.35);
+  }
+}

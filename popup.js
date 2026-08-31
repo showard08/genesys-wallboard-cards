@@ -156,8 +156,10 @@ function read() {
 // Derived UI state: value labels, dependent rows greyed out
 function refresh() {
   $('fontScaleValue').textContent = Math.round(parseFloat($('fontScale').value) * 100) + '%';
+  $('wallboardHeightValue').textContent = $('wallboardHeight').value + '%';
   const compact = document.querySelector('input[name="style"]:checked').value === 'compact';
-  $('columnsRow').classList.toggle('disabled', compact);
+  // Cards per row applies to compact too in wallboard mode
+  $('columnsRow').classList.toggle('disabled', compact && !$('wallboard').checked);
   for (const row of document.querySelectorAll('[data-depends]')) {
     row.classList.toggle('disabled', !$(row.dataset.depends).checked);
   }

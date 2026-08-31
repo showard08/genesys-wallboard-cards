@@ -124,12 +124,8 @@
     </div>
     <div class="row sub" data-depends="wallboard">
       <label for="wallboardHeight">Wallboard height</label>
-      <select id="wallboardHeight">
-        <option value="40">40% of screen</option>
-        <option value="50">50% of screen</option>
-        <option value="60">60% of screen</option>
-        <option value="75">75% of screen</option>
-      </select>
+      <input type="range" id="wallboardHeight" min="20" max="90" step="5">
+      <span class="value" id="wallboardHeightValue"></span>
     </div>
   </section>
 
