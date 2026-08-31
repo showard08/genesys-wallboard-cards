@@ -8,21 +8,24 @@
 #
 # The publish call submits the update for Microsoft certification; it goes
 # live to users automatically once certified.
- 
+
 name: Publish to Edge Add-ons
- 
+
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
       - '[0-9]+.[0-9]+.[0-9]+'
- 
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
- 
+
+      - name: Run unit tests
+        run: node --test
+
       - name: Check tag matches manifest version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -32,15 +35,15 @@ jobs:
             exit 1
           fi
           echo "Releasing version $VERSION"
- 
+
       - name: Build package zip
         run: |
           zip extension.zip \
-            manifest.json background.js sites.js defaults.js \
+            manifest.json background.js sites.js defaults.js security.js \
             cards.js cards.css popup.html popup.js \
             dial-dispatch.js dial-genesys.js schema.json \
             icon-16.png icon-32.png icon-48.png icon-128.png
- 
+
       - name: Upload package to draft submission
         id: upload
         run: |
@@ -55,7 +58,7 @@ jobs:
           OP="${OP##*/}"   # tolerate a full URL or a bare operation ID
           if [ -z "$OP" ]; then echo "::error::No operation ID returned"; exit 1; fi
           echo "operation=$OP" >> "$GITHUB_OUTPUT"
- 
+
       - name: Wait for package processing
         run: |
           for i in $(seq 1 30); do
@@ -75,7 +78,7 @@ jobs:
           done
           echo "::error::Timed out waiting for package processing"
           exit 1
- 
+
       - name: Publish the draft submission
         run: |
           BODY=$(curl -s -w '\nHTTP %{http_code}' \
